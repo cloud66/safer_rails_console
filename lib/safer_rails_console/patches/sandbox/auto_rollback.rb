@@ -12,7 +12,8 @@ module SaferRailsConsole
         end
 
         def self.handle_and_reraise_exception(error)
-          if error.message.include?('PG::ReadOnlySqlTransaction')
+          binding.pry
+          if error.message.include?('PG::ReadOnlySqlTransaction') || error.message.include?('MySQL::ReadOnlySqlTransaction')
             puts SaferRailsConsole::Colors.color_text( # rubocop:disable Rails/Output
               'An operation could not be completed due to read-only mode.',
               SaferRailsConsole::Colors::RED
@@ -34,6 +35,18 @@ module SaferRailsConsole
 
         if defined?(::ActiveRecord::ConnectionAdapters::PostgreSQLAdapter)
           ::ActiveRecord::ConnectionAdapters::PostgreSQLAdapter.prepend(PostgreSQLAdapterPatch)
+        end
+
+        module Mysql2AdapterPatch
+          def execute_and_clear(...)
+            super
+          rescue StandardError => e
+            SaferRailsConsole::Patches::Sandbox::AutoRollback.handle_and_reraise_exception(e)
+          end
+        end
+
+        if defined?(::ActiveRecord::ConnectionAdapters::Mysql2Adapter)
+          ActiveRecord::ConnectionAdapters::Mysql2Adapter.prepend(Mysql2AdapterPatch)
         end
       end
     end
